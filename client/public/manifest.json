@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "LeetCode Collab",
+    "description": "Collaborate on LeetCode problems together",
+    "version": "1.0",
+    "action": {
+      "default_popup": "index.html",
+      "default_icon": "icon.png"
+    },
+    "permissions": [],
+    "host_permissions": ["<all_urls>"],
+    "icons": {
+      "128": "icon.png"
+    }
+  }
+  
