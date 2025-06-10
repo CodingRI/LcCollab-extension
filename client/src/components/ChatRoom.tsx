@@ -1,41 +1,77 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
+import { FiCopy, FiUser, FiArrowLeft } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
+
+type User = {
+  name: string;
+  avatar?: string;
+  color: string; // Added user color
+};
 
 type ChatMessage = {
-  user: string;
+  user: User;
   content: string;
+  timestamp: Date;
   isLocal?: boolean;
   roomId: string;
 };
 
 type ChatRoomProps = {
   roomId: string;
-  username: string;
+  user: User;
   onLeaveRoom: () => void;
 };
 
-export const ChatRoom = ({ roomId, username, onLeaveRoom }: ChatRoomProps) => {
+export const ChatRoom = ({ roomId, user, onLeaveRoom }: ChatRoomProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const ws = useRef<WebSocket | null>(null);
 
+  const copyRoomId = () => {
+    navigator.clipboard.writeText(roomId);
+    addSystemMessage("Room ID copied to clipboard!");
+  };
+
+  const addSystemMessage = (content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        user: { name: "System", color: "#9CA3AF" },
+        content,
+        timestamp: new Date(),
+        roomId,
+      },
+    ]);
+  };
+
   const sendMessage = () => {
     if (!input.trim() || !isConnected || !ws.current) return;
-    
+
     const message = {
-      type: 'chat',
-      username,
+      type: "chat",
+      user,
       content: input,
-      roomId
+      roomId,
+      timestamp: new Date(),
     };
 
     // Add message to local state immediately
-    setMessages(prev => [...prev, { user: username, content: input, isLocal: true, roomId }]);
-    
+    setMessages((prev) => [
+      ...prev,
+      {
+        user,
+        content: input,
+        isLocal: true,
+        timestamp: new Date(),
+        roomId,
+      },
+    ]);
+
     // Send to server
     ws.current.send(JSON.stringify(message));
-    setInput('');
+    setInput("");
   };
 
   useEffect(() => {
@@ -43,130 +79,205 @@ export const ChatRoom = ({ roomId, username, onLeaveRoom }: ChatRoomProps) => {
 
     ws.current.onopen = () => {
       setIsConnected(true);
-      setMessages(prev => [...prev, { user: 'System', content: 'Connected to server', roomId: '' }]);
-      
+      addSystemMessage("Connected to server");
+
       // Join the room
       const joinMessage = {
-        type: 'join',
-        username,
-        roomId
+        type: "join",
+        user,
+        roomId,
       };
       ws.current?.send(JSON.stringify(joinMessage));
     };
 
     ws.current.onclose = () => {
       setIsConnected(false);
-      setMessages(prev => [...prev, { user: 'System', content: 'Disconnected from server', roomId: '' }]);
+      addSystemMessage("Disconnected from server");
     };
 
     ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setMessages(prev => [...prev, { user: 'System', content: 'Connection error', roomId: '' }]);
+      console.error("WebSocket error:", error);
+      addSystemMessage("Connection error");
     };
 
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
-        switch(data.type) {
-          case 'room-joined':
-            setMessages(prev => [...prev, { user: 'System', content: `Joined room ${data.roomId}`, roomId: data.roomId }]);
+
+        switch (data.type) {
+          case "room-joined":
+            addSystemMessage(`Joined room ${data.roomId}`);
             break;
-            
-          case 'chat':
-            if (data.roomId === roomId && data.username !== username) {
-              setMessages(prev => [...prev, { user: data.username, content: data.content, roomId: data.roomId }]);
+
+          case "chat":
+            if (data.roomId === roomId && data.user.name !== user.name) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  user: data.user,
+                  content: data.content,
+                  timestamp: new Date(data.timestamp),
+                  roomId: data.roomId,
+                },
+              ]);
             }
             break;
-            
+
           default:
-            setMessages(prev => [...prev, { user: 'System', content: event.data, roomId: '' }]);
+            addSystemMessage(event.data);
         }
       } catch (e) {
-        setMessages(prev => [...prev, { user: 'System', content: event.data, roomId: '' }]);
+        addSystemMessage(event.data);
       }
     };
 
     return () => {
       ws.current?.close();
     };
-  }, [roomId, username]);
+  }, [roomId, user]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const roomMessages = messages.filter(msg => msg.roomId === roomId);
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const roomMessages = messages.filter((msg) => msg.roomId === roomId);
 
   return (
-    <div className="w-[350px] h-[500px] bg-gray-900/85 backdrop-blur-lg rounded-xl border border-gray-700 flex flex-col shadow-2xl overflow-hidden text-gray-200 font-sans">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="w-[350px] h-[500px] bg-gray-900/90 backdrop-blur-sm rounded-lg border border-gray-700 flex flex-col overflow-hidden shadow-xl"
+    >
       {/* Header */}
-      <div className="p-4 border-b border-gray-700 flex items-center justify-between bg-gray-800/50">
+      <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-800/50">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-white">Room: {roomId}</h3>
-          <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <div className="flex space-x-1">
+            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+          </div>
+          <h3 className="text-sm font-medium text-gray-300">room:~/{roomId}</h3>
         </div>
-        <div className="text-xs text-gray-400 bg-gray-700/50 px-2 py-1 rounded-full">
-          {username}
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-2 w-2 rounded-full ${
+              isConnected ? "bg-green-500" : "bg-red-500"
+            }`}
+          ></div>
+          <button
+            onClick={copyRoomId}
+            className="text-xs flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 px-2 py-1 rounded text-gray-300 transition-colors"
+          >
+            <FiCopy size={12} /> Copy ID
+          </button>
         </div>
       </div>
-      
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-        {roomMessages.map((msg, i) => (
-          <div 
-            key={i} 
-            className={`max-w-[80%] flex flex-col ${msg.user === username ? 'items-end' : 'items-start'}`}
-          >
-            {msg.user !== username && (
-              <div className={`text-xs mb-1 font-medium ${msg.user === 'System' ? 'text-gray-400' : 'text-blue-400'}`}>
-                {msg.user}
-              </div>
-            )}
-            <div className={`
-              px-3.5 py-2.5 rounded-lg break-words leading-snug
-              ${msg.user === username 
-                ? 'bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-br-none' 
-                : 'bg-gray-800/80 text-gray-200 border border-gray-700 rounded-bl-none'}
-            `}>
-              {msg.content}
-            </div>
-          </div>
-        ))}
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+        <AnimatePresence>
+          {roomMessages.map((msg, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className={`max-w-[90%] flex flex-col ${
+                msg.user.name === user.name ? "items-end" : "items-start"
+              }`}
+            >
+              {msg.user.name === "System" ? null : (
+                <>
+                  <div className="flex items-center gap-2 w-full">
+                    {msg.user.name !== user.name && (
+                      <>
+                        {msg.user.avatar ? (
+                          <img
+                            src={msg.user.avatar}
+                            className="w-5 h-5 rounded-full border border-gray-600"
+                            alt="avatar"
+                          />
+                        ) : (
+                          <div
+                            className="w-5 h-5 rounded-full flex items-center justify-center border border-gray-600"
+                            style={{ backgroundColor: msg.user.color }}
+                          >
+                            <FiUser size={12} className="text-white" />
+                          </div>
+                        )}
+                        <span
+                          className="text-xs font-medium"
+                          style={{ color: msg.user.color }}
+                        >
+                          {msg.user.name}
+                        </span>
+                      </>
+                    )}
+                    {msg.user.name === user.name && (
+                      <span className="text-xs text-gray-400 mr-2">you</span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {formatTime(msg.timestamp)}
+                    </span>
+                  </div>
+                  <div
+                    className={`
+        px-3 py-2 rounded-lg break-words leading-snug mt-1
+        ${
+          msg.user.name === user.name
+            ? "bg-blue-600 text-white"
+            : "bg-gray-800 text-gray-200"
+        }
+        transition-colors duration-200
+      `}
+                  >
+                    {msg.content}
+                  </div>
+                </>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
-      
+
       {/* Input */}
-      <div className="p-4 border-t border-gray-700 bg-gray-800/50">
-        <div className="flex gap-2 items-center">
+      <div className="p-3 border-t border-gray-700 bg-gray-800/50">
+        <div className="flex items-center gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder="Type a message..."
-            className="flex-1 px-3.5 py-2.5 rounded-full border-none bg-gray-700/50 text-white outline-none text-sm placeholder-gray-400 focus:ring-1 focus:ring-blue-500"
+            className="flex-1 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 outline-none placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all"
           />
-          <button
+          <motion.button
             onClick={sendMessage}
             disabled={!input.trim() || !isConnected}
+            whileTap={{ scale: 0.95 }}
             className={`
-              text-white border-none rounded-full px-4 py-2.5 text-sm font-medium
-              flex items-center justify-center transition-all duration-200
-              ${input.trim() && isConnected 
-                ? 'bg-gradient-to-br from-blue-400 to-blue-500 cursor-pointer hover:from-blue-500 hover:to-blue-600' 
-                : 'bg-gray-700/50 cursor-not-allowed'}
+              px-3 py-2 rounded-lg font-medium transition-all
+              ${
+                input.trim() && isConnected
+                  ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                  : "bg-gray-700 text-gray-500 cursor-not-allowed"
+              }
             `}
           >
             Send
-          </button>
+          </motion.button>
         </div>
         <button
           onClick={onLeaveRoom}
-          className="mt-2 text-sm text-gray-400 hover:text-gray-300 underline w-full text-center"
+          className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
         >
-          Leave Room
+          <FiArrowLeft size={12} /> Leave room
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 };
