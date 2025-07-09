@@ -1,283 +1,128 @@
-import { useEffect, useRef, useState } from "react";
-import { FiCopy, FiUser, FiArrowLeft } from "react-icons/fi";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useRef, useEffect } from "react";
 
-type User = {
-  name: string;
-  avatar?: string;
-  color: string; // Added user color
-};
-
-type ChatMessage = {
-  user: User;
+interface ChatMessage {
+  type: "chat" | "join";
+  username: string;
   content: string;
-  timestamp: Date;
-  isLocal?: boolean;
-  roomId: string;
-};
+  roomId?: string;
+}
 
-type ChatRoomProps = {
-  roomId: string;
-  user: User;
-  onLeaveRoom: () => void;
-};
+interface SystemMessage {
+  type: "system";
+  content: string;
+  roomId?: string;
+}
 
-export const ChatRoom = ({ roomId, user, onLeaveRoom }: ChatRoomProps) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+type WsMessage = ChatMessage | SystemMessage;
+function ChatRoom() {
+  const [username, setUsername] = useState<string>("");
+  const [roomId, setRoomId] = useState<string>("");
+  const [joined, setJoined] = useState<boolean>(false);
+  const [message, setMessage] = useState<string>("");
+  const [messages, setMessages] = useState<WsMessage[]>([]);
+
   const ws = useRef<WebSocket | null>(null);
-
-  const copyRoomId = () => {
-    navigator.clipboard.writeText(roomId);
-    addSystemMessage("Room ID copied to clipboard!");
-  };
-
-  const addSystemMessage = (content: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        user: { name: "System", color: "#9CA3AF" },
-        content,
-        timestamp: new Date(),
-        roomId,
-      },
-    ]);
-  };
-
-  const sendMessage = () => {
-    if (!input.trim() || !isConnected || !ws.current) return;
-
-    const message = {
-      type: "chat",
-      user,
-      content: input,
-      roomId,
-      timestamp: new Date(),
-    };
-
-    // Add message to local state immediately
-    setMessages((prev) => [
-      ...prev,
-      {
-        user,
-        content: input,
-        isLocal: true,
-        timestamp: new Date(),
-        roomId,
-      },
-    ]);
-
-    // Send to server
-    ws.current.send(JSON.stringify(message));
-    setInput("");
-  };
 
   useEffect(() => {
     ws.current = new WebSocket("ws://localhost:8080");
 
     ws.current.onopen = () => {
-      setIsConnected(true);
-      addSystemMessage("Connected to server");
+      console.log("Websocket connected");
+    };
 
-      // Join the room
-      const joinMessage = {
-        type: "join",
-        user,
-        roomId,
-      };
-      ws.current?.send(JSON.stringify(joinMessage));
+    ws.current.onmessage = (event: MessageEvent) => {
+      const msg: WsMessage = JSON.parse(event.data);
+      setMessages((prev) => [...prev, msg]);
     };
 
     ws.current.onclose = () => {
-      setIsConnected(false);
-      addSystemMessage("Disconnected from server");
+      console.log("Websocket disconnected");
+    };
+  }, []);
+
+  const joinRoom = () => {
+    if (!username || !roomId) return alert("Username and room are required");
+    const joinMessage = {
+      type: "join",
+      username,
+      content: "",
+      roomId: null,
     };
 
-    ws.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      addSystemMessage("Connection error");
-    };
-
-    ws.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case "room-joined":
-            addSystemMessage(`Joined room ${data.roomId}`);
-            break;
-
-          case "chat":
-            if (data.roomId === roomId && data.user.name !== user.name) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  user: data.user,
-                  content: data.content,
-                  timestamp: new Date(data.timestamp),
-                  roomId: data.roomId,
-                },
-              ]);
-            }
-            break;
-
-          default:
-            addSystemMessage(event.data);
-        }
-      } catch (e) {
-        addSystemMessage(event.data);
-      }
-    };
-
-    return () => {
-      ws.current?.close();
-    };
-  }, [roomId, user]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    ws.current?.send(JSON.stringify(joinMessage));
+    setJoined(true);
   };
 
-  const roomMessages = messages.filter((msg) => msg.roomId === roomId);
+  const sendMessage = () => {
+    if (!message) return alert("Message is required");
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="w-[350px] h-[500px] bg-gray-900/90 backdrop-blur-sm rounded-lg border border-gray-700 flex flex-col overflow-hidden shadow-xl"
-    >
-      {/* Header */}
-      <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-800/50">
-        <div className="flex items-center gap-2">
-          <div className="flex space-x-1">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+    const chatMessage: ChatMessage = {
+      type: "chat",
+      username,
+      content: message,
+      roomId,
+    };
+
+    ws.current?.send(JSON.stringify(chatMessage));
+    setMessages((prev) => [...prev, chatMessage]);
+    setMessage("");
+  };
+
+  return <>
+      <div>
+        (!joined ? (
+          <div>
+            <input
+            type="text" placeholder="Username" value={username}
+            className="w-full p-2 border rounded" 
+            onChange={(e) => setUsername(e.target.value)}>
+            </input>
+            <input
+            type= "text" placeholder="Room-ID" value={roomId}
+            className="w-full p-2 border rounded"
+            onChange={(e) => setRoomId(e.target.value)}>
+            </input>
+            <button onClick={joinRoom}
+            className="bg-blue-500 text-white px-4 py-2 rounded">
+              Join room
+            </button>
           </div>
-          <h3 className="text-sm font-medium text-gray-300">room:~/{roomId}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <div
-            className={`h-2 w-2 rounded-full ${
-              isConnected ? "bg-green-500" : "bg-red-500"
-            }`}
-          ></div>
-          <button
-            onClick={copyRoomId}
-            className="text-xs flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 px-2 py-1 rounded text-gray-300 transition-colors"
-          >
-            <FiCopy size={12} /> Copy ID
-          </button>
-        </div>
-      </div>
+        ) : (
+          <div>
+          <div className="mb-4 h-80 overflow-y-auto border p-2 rounded bg-gray-100">
+            {messages.map((msg, idx) => (
+              <div key={idx} className="mb-1">
+                {msg.type === 'system' ? (
+                  <em className="text-gray-500">{msg.content}</em>
+                ) : (
+                  <span><strong>{msg.username}:</strong> {msg.content}</span>
+                )}
+              </div>
+            ))}
+          </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
-        <AnimatePresence>
-          {roomMessages.map((msg, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className={`max-w-[90%] flex flex-col ${
-                msg.user.name === user.name ? "items-end" : "items-start"
-              }`}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              className="flex-1 p-2 border rounded"
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            />
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded"
+              onClick={sendMessage}
             >
-              {msg.user.name === "System" ? null : (
-                <>
-                  <div className="flex items-center gap-2 w-full">
-                    {msg.user.name !== user.name && (
-                      <>
-                        {msg.user.avatar ? (
-                          <img
-                            src={msg.user.avatar}
-                            className="w-5 h-5 rounded-full border border-gray-600"
-                            alt="avatar"
-                          />
-                        ) : (
-                          <div
-                            className="w-5 h-5 rounded-full flex items-center justify-center border border-gray-600"
-                            style={{ backgroundColor: msg.user.color }}
-                          >
-                            <FiUser size={12} className="text-white" />
-                          </div>
-                        )}
-                        <span
-                          className="text-xs font-medium"
-                          style={{ color: msg.user.color }}
-                        >
-                          {msg.user.name}
-                        </span>
-                      </>
-                    )}
-                    {msg.user.name === user.name && (
-                      <span className="text-xs text-gray-400 mr-2">you</span>
-                    )}
-                    <span className="text-xs text-gray-500">
-                      {formatTime(msg.timestamp)}
-                    </span>
-                  </div>
-                  <div
-                    className={`
-        px-3 py-2 rounded-lg break-words leading-snug mt-1
-        ${
-          msg.user.name === user.name
-            ? "bg-blue-600 text-white"
-            : "bg-gray-800 text-gray-200"
-        }
-        transition-colors duration-200
-      `}
-                  >
-                    {msg.content}
-                  </div>
-                </>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="p-3 border-t border-gray-700 bg-gray-800/50">
-        <div className="flex items-center gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
-            className="flex-1 bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 outline-none placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all"
-          />
-          <motion.button
-            onClick={sendMessage}
-            disabled={!input.trim() || !isConnected}
-            whileTap={{ scale: 0.95 }}
-            className={`
-              px-3 py-2 rounded-lg font-medium transition-all
-              ${
-                input.trim() && isConnected
-                  ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
-                  : "bg-gray-700 text-gray-500 cursor-not-allowed"
-              }
-            `}
-          >
-            Send
-          </motion.button>
+              Send
+            </button>
+          </div>
         </div>
-        <button
-          onClick={onLeaveRoom}
-          className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
-        >
-          <FiArrowLeft size={12} /> Leave room
-        </button>
+        ))
       </div>
-    </motion.div>
-  );
-};
+  
+  </>;
+}
+
+export default ChatRoom;
+
