@@ -1,23 +1,21 @@
-import { useState } from "react"
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
 import ChatRoom from "./components/ChatRoom"
 import CreateRoom from "./components/CreateRoom"
 import JoinRoom from "./components/JoinRoom"
 import WelcomePage from "./components/WelcomePage"
 
 function App() {
-  const [step, setStep] = useState<"Welcome" | "Create" | "Join">("Welcome")
+
 
   return (
-    <>
-      {step == "Welcome" && (
-        <WelcomePage
-        onCreateRoom={() => setStep("Create")}
-        onJoinRoom={() => setStep("Join")}/>
-      )}
-
-      {step === "Create" && <CreateRoom/>}
-      {step === "Join" && <JoinRoom/>}
-    </>
+    <Router>
+      <Routes>
+        <Route path="/" element = {<WelcomePage/>}/>
+        <Route path="/create" element = {<CreateRoom/>}/>
+        <Route path = "/join" element = {<JoinRoom/>}/>
+        <Route path = "/chat/:roomId" element = {<ChatRoom/>}/>
+      </Routes>
+    </Router>
   )
 }
 

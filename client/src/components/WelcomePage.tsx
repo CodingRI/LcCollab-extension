@@ -1,10 +1,9 @@
+import { useNavigate } from "react-router-dom";
 
-interface WelcomePageProps {
-  onCreateRoom: () => void;
-  onJoinRoom: () => void;
-}
 
-function WelcomePage({ onCreateRoom, onJoinRoom }: WelcomePageProps) {
+function WelcomePage() {
+const navigate = useNavigate();
+
   return (
     <>
       <div>
@@ -12,14 +11,14 @@ function WelcomePage({ onCreateRoom, onJoinRoom }: WelcomePageProps) {
         <div className="space-x-4">
           <button
             className="bg-green-500 text-white px-6 py-3 rounded hover:bg-green-600"
-            onClick={onCreateRoom}
+            onClick={() => navigate("/create")}
           >
             Create a room
           </button>
 
           <button
             className="bg-green-500 text-white px-6 py-3 rounded hover:bg-green-600"
-            onClick={onJoinRoom}
+            onClick={() => navigate("/join")}
           >
             Join a room
           </button>
